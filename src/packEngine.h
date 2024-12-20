@@ -75,6 +75,10 @@ namespace raven
             }
             void pack(cItem &item)
             {
+                if (!mySpaces.size())
+                    throw std::runtime_error(
+                        "Packing engine not initialized");
+
                 // find index of space where the box will fit
                 int space = findBestSpace(item);
                 if (space < 0)
@@ -83,10 +87,20 @@ namespace raven
 
                 // move the box into the space
                 item.move(mySpaces[space]);
+                myItems.push_back(item);
 
                 // // split the space into two smaller spaces
                 // // one to the right, one below
                 splitSpace(space, item);
+            }
+
+            int itemCount() const
+            {
+                return myItems.size();
+            }
+            const std::vector<cItem> &getPack() const
+            {
+                return myItems;
             }
 
         private:
@@ -110,6 +124,16 @@ namespace raven
                         return a.volume() < b.volume();
                     });
             }
+            bool canFit(
+                const cItem &space,
+                const cItem &item)
+            {
+                if (space.wlh.x < item.wlh.x)
+                    return false;
+                if (space.wlh.y < item.wlh.y)
+                    return false;
+                return true;
+            }
             int findBestSpace(const cItem &item)
             {
                 int bestSpaceIndex = -1;
@@ -120,8 +144,8 @@ namespace raven
                     // check for remains of a split space
                     if (mySpaces[s].loc.x < 0)
                         continue;
-                    // check that space is tall enough for box
-                    if (mySpaces[s].wlh.y < item.wlh.y)
+                    // check that space is big enough for box
+                    if( ! canFit(mySpaces[s],item))
                         continue;
 
                     // the box could be fitted into this space
