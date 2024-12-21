@@ -12,9 +12,11 @@ namespace raven
         public:
             cxyz wlh;
             cxyz loc;
+            bool frotated;
 
             cItem(double x, double y, double z)
-                : wlh(x, y, z)
+                : wlh(x, y, z),
+                  frotated(false)
             {
             }
             cItem(double x, double y)
@@ -35,10 +37,17 @@ namespace raven
             }
             double volume() const
             {
-                if (abs(wlh.z) > 0.0001)
-                    return abs(wlh.x * wlh.y * wlh.z);
-                else
-                    return abs(wlh.x * wlh.y);
+                // if (abs(wlh.z) > 0)
+                //     return abs(wlh.x * wlh.y * wlh.z);
+                // else
+                return abs(wlh.x * wlh.y);
+            }
+            void rotate()
+            {
+                double temp = wlh.x;
+                wlh.x = wlh.y;
+                wlh.y = temp;
+                frotated = true;
             }
         };
 
@@ -51,6 +60,15 @@ namespace raven
                 minGap,
                 minDist,
             };
+            cEngine()
+                : myBestSpaceAlgo(eBestSpaceAlgo::firstFit),
+                  mySpin(false)
+            {
+            }
+            void setSpin()
+            {
+                mySpin = true;
+            }
             void setBestSpaceAlgo(eBestSpaceAlgo algo)
             {
                 myBestSpaceAlgo = algo;
@@ -59,12 +77,17 @@ namespace raven
             {
                 f2d = true;
                 mySpaces.clear();
+                myItems.clear();
                 mySpaces.emplace_back(x, y, -DBL_MAX);
                 mySpaces[0].move(0, 0);
             }
             void addItem(int x, int y, int z)
             {
                 myItems.emplace_back(x, y, z);
+            }
+            void addItem(const cItem &item)
+            {
+                myItems.push_back(item);
             }
             void pack()
             {
@@ -82,6 +105,14 @@ namespace raven
                 // find index of space where the box will fit
                 int space = findBestSpace(item);
                 if (space < 0)
+                {
+                    if (mySpin)
+                    {
+                        item.rotate();
+                        space = findBestSpace(item);
+                    }
+                }
+                if (space < 0)
                     throw std::runtime_error(
                         "No space for item");
 
@@ -92,6 +123,22 @@ namespace raven
                 // // split the space into two smaller spaces
                 // // one to the right, one below
                 splitSpace(space, item);
+            }
+
+            /* Sort boxes into order of decreasing volume
+
+This permits the smaller boxes to be packed into
+the spaces left behind by the larger boxes previously packed.
+
+*/
+            void sort()
+            {
+                std::sort(
+                    myItems.begin(), myItems.end(),
+                    [](const cItem &a, const cItem &b)
+                    {
+                        return a.volume() > b.volume();
+                    });
             }
 
             int itemCount() const
@@ -106,24 +153,10 @@ namespace raven
         private:
             bool f2d;
             eBestSpaceAlgo myBestSpaceAlgo;
+            bool mySpin; // true if rotation allowed
             std::vector<cItem> myItems;
             std::vector<cItem> mySpaces;
 
-            /* Sort boxes into order of decreasing volume
-
-            This permits the smaller boxes to be packed into
-            the spaces left behind by the larger boxes previously packed.
-
-            */
-            void sort()
-            {
-                std::sort(
-                    myItems.begin(), myItems.end(),
-                    [](const cItem &a, const cItem &b)
-                    {
-                        return a.volume() < b.volume();
-                    });
-            }
             bool canFit(
                 const cItem &space,
                 const cItem &item)
@@ -145,7 +178,7 @@ namespace raven
                     if (mySpaces[s].loc.x < 0)
                         continue;
                     // check that space is big enough for box
-                    if( ! canFit(mySpaces[s],item))
+                    if (!canFit(mySpaces[s], item))
                         continue;
 
                     // the box could be fitted into this space
